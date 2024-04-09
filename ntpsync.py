@@ -1,5 +1,5 @@
 import wifi
-import ntptime
+import ntptime2 as ntptime
 from machine import RTC
 
 def printnow():

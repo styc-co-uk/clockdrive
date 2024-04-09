@@ -37,7 +37,7 @@ def off_min():
     Min1(False)
 
 # move minute hand
-def move_min(timer=None):
+def move_min():
     global forward
     Min0(forward)
     Min1(not forward)
