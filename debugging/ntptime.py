@@ -1,5 +1,7 @@
-import utime
-
+try:
+    import utime
+except:
+    import time as utime
 try:
     import usocket as socket
 except:
@@ -21,12 +23,15 @@ def time():
     addr = socket.getaddrinfo(host, 123)[0][-1]
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
+        # addr = socket.getaddrinfo(host, 123)[0][-1]
         s.settimeout(timeout)
         res = s.sendto(NTP_QUERY, addr)
         msg = s.recv(48)
     finally:
         s.close()
     val = struct.unpack("!I", msg[40:44])[0]
+    # millisecond
+    val_ms = round(struct.unpack("!I", msg[44:48])[0]*2**-32*1000)
 
     EPOCH_YEAR = utime.gmtime(0)[0]
     if EPOCH_YEAR == 2000:
@@ -38,13 +43,18 @@ def time():
     else:
         raise Exception("Unsupported epoch: {}".format(EPOCH_YEAR))
 
-    return val - NTP_DELTA
-
+    return val - NTP_DELTA, val_ms
 
 # There's currently no timezone support in MicroPython, and the RTC is set in UTC time.
 def settime():
-    t = time()
-    import machine
+    t,ms = time()
+    # runtime correction
+    ms_corr = utime.ticks_ms()
+
+    from machine import RTC
 
     tm = utime.gmtime(t)
-    machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))
+    # microsecond useless see https://www.raspberrypi.com/documentation/pico-sdk/hardware.html#rpipc382390bd58f4f14aadf
+    # use sleep to align second
+    utime.sleep_ms(999-min(utime.ticks_diff(utime.ticks_ms(),ms_corr)+ms,999))
+    RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5]+1, 0))
