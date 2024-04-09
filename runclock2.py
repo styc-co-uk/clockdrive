@@ -5,6 +5,10 @@ from machine import RTC, Pin, Timer
 
 # This code runs the clock
 
+# setup timers
+preTick = Timer()
+minTick = Timer()
+
 # wait until second is aligned and start timer
 def alignSec():
     from timeconvert import minsFrom12
@@ -16,7 +20,7 @@ def alignSec():
         hour,minute,second = rtc.datetime()[4:7]
         if second != lastsec:
             # activate timer at the next full minute
-            preTick = Timer(mode=Timer.ONE_SHOT, period=1000*(60-second), callback=initPulse)
+            preTick.init(mode=Timer.ONE_SHOT, period=1000*(60-second), callback=initPulse)
             # update time from 12 counter
             minSince = minsFrom12(hour,minute)
             print(minSince,'alignSec')
@@ -30,7 +34,7 @@ def initPulse(timer):
     # if reset on 11:59
     if minSince >=720: minSince = 0
     # fire the periodic 60sec pulse (starting after 60s)
-    minTick = Timer(mode=Timer.PERIODIC, period=60000, callback=minPulse)
+    minTick.init(mode=Timer.PERIODIC, period=60000, callback=minPulse)
     print(minSince,'initPulse')
     # initiate the 1st pulse
     mindrive.move_min()
