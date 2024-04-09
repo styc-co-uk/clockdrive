@@ -77,3 +77,36 @@ mindrive.off_min()
 Pin("LED", Pin.OUT).on()
 
 alignSec()
+
+
+
+#%%%%%% THE RESET BUTTON %%%%%%
+
+alignRequest = Timer()
+
+def alignRequestFun(timer):
+    ntpsync.updateRTC()
+    alignSec()
+    
+# debounce button
+def buttonIrq(pin):
+    global butIrqCount
+    if butIrqCount == 0:
+        butIrqCount=-1
+        #reset all ticks but don't touch minute counter, thic only moves hand
+        preTick.deinit()
+        minTick.deinit()
+        alignRequest.deinit()
+        print('button pressed')
+        mindrive.move_min()
+        alignRequest.init(mode=Timer.ONE_SHOT, period=500, callback=alignRequestFun)
+        Timer(mode=Timer.ONE_SHOT, period=300, callback=resetIrqCount)
+        
+        
+def resetIrqCount(timer=None):
+    global butIrqCount
+    butIrqCount = 0
+           
+resetIrqCount()
+resetBut = Pin(0, mode=Pin.IN, pull=Pin.PULL_UP)
+resetBut.irq(trigger=Pin.IRQ_FALLING,handler=buttonIrq)
