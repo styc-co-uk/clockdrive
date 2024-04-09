@@ -15,9 +15,9 @@ led0 = Pin(pinout['led0'], Pin.OUT)
 led1 = Pin(pinout['led1'], Pin.OUT)
 
 # input variable forward
-def setFor(ifFor):
+def setFwd(ifFwd):
     global forward
-    forward = ifFor
+    forward = ifFwd
 
 # direction 1
 def Min0(val):

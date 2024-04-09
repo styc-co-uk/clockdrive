@@ -9,7 +9,7 @@ from machine import RTC, Pin
 ntpsync.updateRTC()
 
 # set first run to forward
-mindrive.setFor(True)
+mindrive.setFwd(True)
 
 # reset all outputs
 mindrive.off_min()
@@ -24,7 +24,7 @@ rtc = RTC()
 lasthor,lastmin = rtc.datetime()[4:6]
 
 # turn on machine LED when all setup is done
-machine.Pin("LED", machine.Pin.OUT).on()
+Pin("LED", Pin.OUT).on()
 
 while True:
     # obtain current time
