@@ -46,15 +46,17 @@ def time():
     return val - NTP_DELTA, val_ms
 
 # There's currently no timezone support in MicroPython, and the RTC is set in UTC time.
-def settime():
-    t,ms = time()
+def settime(t=time()[0]):
+    #t,ms= time()
     # runtime correction
-    ms_corr = utime.ticks_ms()
+    # this will not work
+    #ms_corr = utime.ticks_ms()
 
     from machine import RTC
 
     tm = utime.gmtime(t)
     # microsecond useless see https://www.raspberrypi.com/documentation/pico-sdk/hardware.html#rpipc382390bd58f4f14aadf
     # use sleep to align second
-    utime.sleep_ms(999-min(utime.ticks_diff(utime.ticks_ms(),ms_corr)+ms,999))
-    RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5]+1, 0))
+    #utime.sleep_ms(999-min(utime.ticks_diff(utime.ticks_ms(),ms_corr)+ms,999))
+    RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))
+    print('time set',RTC().datetime())
