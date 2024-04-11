@@ -46,8 +46,9 @@ def time():
     return val - NTP_DELTA, val_ms
 
 # There's currently no timezone support in MicroPython, and the RTC is set in UTC time.
-def settime(t=time()[0]):
-    #t,ms= time()
+def settime(t=-1):
+    if t==-1:
+        t,_= time()
     # runtime correction
     # this will not work
     #ms_corr = utime.ticks_ms()
