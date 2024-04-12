@@ -11,10 +11,13 @@ def printnow():
 def updateRTC():
     # this code can get UTC time from web and update Pi's clock
     wifi.connect()
-    ntptime2.host = "uk.pool.ntp.org"
+    ntphosts = ("uk.pool.ntp.org","0.uk.pool.ntp.org","1.uk.pool.ntp.org","2.uk.pool.ntp.org","3.uk.pool.ntp.org","pool.ntp.org")
+    # ntptime2.host = ntphosts[0]
     # try four times to get time
-    for i in range(10):
+    for i in range(len(ntphosts)):
+        ntptime2.host = ntphosts[i]
         try:
+            print ('Syncing time from %s' % ntphosts[i])
             t,ms = ntptime2.time()
             # Note. settime() causes ~10ms delay
             ntptime2.settime(t)
@@ -28,8 +31,6 @@ def updateRTC():
             ms  = -1
             mSe = -1
             sec = -1
-            if i == 5:
-                ntptime2.host = "pool.ntp.org"
         else:
             break
     return mSe, sec, ms
