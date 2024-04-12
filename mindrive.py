@@ -15,7 +15,7 @@ led0 = Pin(pinout['led0'], Pin.OUT)
 led1 = Pin(pinout['led1'], Pin.OUT)
 
 # input variable forward
-def setFwd(ifFwd):
+def setFwd(ifFwd=True):
     global forward
     forward = ifFwd
 
@@ -43,5 +43,6 @@ def move_min():
     Min1(not forward)
     #print(forward)
     forward = not forward
-    time.sleep(0.3)
+    time.sleep(0.25)
     off_min()
+    time.sleep(0.25)
