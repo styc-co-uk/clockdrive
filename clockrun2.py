@@ -5,12 +5,11 @@ from machine import Pin, Timer
 
 # This code runs the clock
 
-minMove = 0
 # define minute advance function
 def moveMin(dMin):
     for i in range(dMin):
         Timer().init(mode=Timer.ONE_SHOT, period=0, callback=minWorker)
-    print(f'Min hand +{dMin}')
+    print(f'Minute hand +{dMin}')
 
 def minWorker(timer):
     mindrive.move_min()
@@ -25,7 +24,7 @@ minSince = None
 def alignSec():
     global minSince
     from timeconvert import minsFrom12
-    print ('Waiting for second to align')
+    print ('I am correcting clock...')
     #lasthor,lastmin,lastsec = rtc.datetime()[4:7]
 
     # update NTP time to RTC, get current ms
@@ -109,20 +108,17 @@ def pulseCal(timer):
     print('Minute pulse disabled')
     alignSec()
 
-# update NTP time to RTC
-#rtc = RTC()
-#ntpsync.updateRTC()
+if __name__ == "__main__":
+    # set first run to forward
+    mindrive.setFwd(True)
 
-# set first run to forward
-mindrive.setFwd(True)
+    # reset all outputs
+    mindrive.off_min()
 
-# reset all outputs
-mindrive.off_min()
+    # turn on machine LED when all setup is done
+    Pin("LED", Pin.OUT).on()
 
-# turn on machine LED when all setup is done
-Pin("LED", Pin.OUT).on()
-
-alignSec()
+    alignSec()
 
 
 

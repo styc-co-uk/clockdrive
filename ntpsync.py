@@ -16,12 +16,13 @@ def updateRTC():
     for i in range(10):
         try:
             t,ms = ntptime2.time()
-            # ~10ms delay, do this to save memory
+            # Note. settime() causes ~10ms delay
             ntptime2.settime(t)
             tm = utime.gmtime(t)
-            # mins since 12
+            # convert to standartised timescale minute
             mSe = minsFrom12(tm[3],tm[4])
             sec = tm[5]
+            print (f'Minute since UTC 12 am/pm %03d:%02d.%03d'%(mSe,sec,ms))
         except:
             print ('get time error')
             ms  = -1
@@ -32,5 +33,5 @@ def updateRTC():
         else:
             break
     return mSe, sec, ms
-    #wifi.disconnect()
-    #printnow()
+    ## uncomment to discconnect WiFi after obtaining time 
+    # wifi.disconnect()

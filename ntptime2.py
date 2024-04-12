@@ -1,3 +1,10 @@
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# % This code is forked from                          %
+# % https://github.com/micropython/micropython-lib/blob/master/micropython/net/ntptime/ntptime.py %
+# % with additional feature to support millisecond    %
+# % NTP protocal supports accuracy up to 2^-32 second %
+# % but exceeds the machine accuracy                  %
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 try:
     import utime
 except:
@@ -29,8 +36,9 @@ def time():
         msg = s.recv(48)
     finally:
         s.close()
+    # Date and time accurate to second
     val = struct.unpack("!I", msg[40:44])[0]
-    # millisecond
+    # Time in milisecond
     val_ms = round(struct.unpack("!I", msg[44:48])[0]*2**-32*1000)
 
     EPOCH_YEAR = utime.gmtime(0)[0]
@@ -46,18 +54,15 @@ def time():
     return val - NTP_DELTA, val_ms
 
 # There's currently no timezone support in MicroPython, and the RTC is set in UTC time.
-def settime(t=-1):
-    if t==-1:
+def settime(t=None):
+    if t==None:
         t,_= time()
-    # runtime correction
-    # this will not work
-    #ms_corr = utime.ticks_ms()
 
     from machine import RTC
 
     tm = utime.gmtime(t)
-    # microsecond useless see https://www.raspberrypi.com/documentation/pico-sdk/hardware.html#rpipc382390bd58f4f14aadf
-    # use sleep to align second
-    #utime.sleep_ms(999-min(utime.ticks_diff(utime.ticks_ms(),ms_corr)+ms,999))
+    # RTC not supporting millisecond
+    # see https://www.raspberrypi.com/documentation/pico-sdk/hardware.html#rpipc382390bd58f4f14aadf
+    # note: the RTC second tick can not be changed using 'utime.sleep_ms'
     RTC().datetime((tm[0], tm[1], tm[2], tm[6] + 1, tm[3], tm[4], tm[5], 0))
-    print('time set',RTC().datetime())
+    print('Machine RTC set: %04d-%02d-%02d, %02d:%02d:%02d' % tuple(tm[0:6]))

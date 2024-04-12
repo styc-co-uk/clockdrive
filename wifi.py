@@ -1,3 +1,7 @@
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# % This code connects pico to wifi with stored info %
+# % info stored in auth.json at the pico root folder %
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 import network
 import time
 import json
@@ -16,7 +20,8 @@ def connect():
     while wlan.isconnected() == False:
         print('Wifi: Waiting for connection...')
         time.sleep(1)
-    print(f'Wifi: Connected')
+    ip = wlan.ifconfig()[0]
+    print(f'Wifi: Connected, IP: {ip}')
     
 def disconnect():
     #Turn off wifi module
