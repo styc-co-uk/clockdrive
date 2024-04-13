@@ -1,6 +1,5 @@
 import ntpsync
 import mindrive
-import time
 from machine import Pin, Timer
 
 # This code runs the clock
@@ -23,7 +22,6 @@ minSince = None
 # wait until second is aligned and start timer
 def alignSec():
     global minSince
-    from timeconvert import minsFrom12
     print ('I am correcting clock...')
     #lasthor,lastmin,lastsec = rtc.datetime()[4:7]
 
@@ -108,18 +106,69 @@ def pulseCal(timer):
     print('Minute pulse disabled')
     alignSec()
 
-if __name__ == "__main__":
-    # set first run to forward
-    mindrive.setFwd(True)
+def realignNTC():
+    #reset all ticks but don't touch minute counter, thic only moves hand
+    preTick.deinit()
+    minTick.deinit()
+    resQueue.init(mode=Timer.ONE_SHOT, period=1000, callback=lambda i: alignSec())
+    print('Realigning to NTP')
 
-    # reset all outputs
-    mindrive.off_min()
 
-    # turn on machine LED when all setup is done
-    Pin("LED", Pin.OUT).on()
+# %%%%%% THE WEBPAGE %%%%%%
+# Import necessary modules
+import socket
+import re
 
-    alignSec()
+# HTML template for the webpage
+def webpage(hour,minute,hourDST,advMineq):
+    html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Master clock control</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+        </head>
+        <body>
+            <h1>Master clock control</h1>
+            <h2><span id='gmt'>GMT</span> {hour:d}&#183;{minute:02d} / <span id='bst'>BST</span> {hourDST:d}&#183;{minute:02d}</h2>
+            <form action="./syncNTP">
+                <input type="submit" value="Sync with NTP" />
+            </form>
+            <h2>Manual adjust</h2>
+            <form action="./advance" method="set">
+                <label for="msg">Advance</label>
+                <input type="int" size=3 maxlength=3 name="advMin" />
+                <input type="submit" value="Submit"/>
+            </form>
+            <h2>Daylight saving</h2>
+            <form action="./DSTon">
+                <input type="submit" value="GMT&rarr;BST" />
+            </form>
+            <br>
+            <form action="./DSToff">
+                <input type="submit" value="GMT&larr;BST" />
+            </form>
+            <h2>Apply change</h2>
+            <p>The clock will advance {advMineq} minutes.
+            <form action="./applyCh">
+                <input type="submit" value="Move!" />
+            </form>
+            <br>
+            <form action="./clrCh">
+                <input type="submit" value="Clear" />
+            </form>
+        </body>
+        </html>
+        """
+    return str(html)
 
+# Set up socket and start listening
+addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(addr)
+s.listen()
+print('Listening on', addr)
 
 
 #%%%%%% THE RESET BUTTON %%%%%%
@@ -132,11 +181,8 @@ def resIrq(pin):
     global resIrqCount
     if resIrqCount == 0:
         resIrqCount=-1
-        #reset all ticks but don't touch minute counter, thic only moves hand
-        preTick.deinit()
-        minTick.deinit()
+        realignNTC()
         print('Time reset button pressed')
-        resQueue.init(mode=Timer.ONE_SHOT, period=1000, callback=lambda i: alignSec())
         resetIrqT.init(mode=Timer.ONE_SHOT, period=400, callback=resetIrqCount)
 
 resetIrqT = Timer()
@@ -145,7 +191,6 @@ def resetIrqCount(timer=None):
     print('Button state reset')
     advIrqCount = 0
     resIrqCount = 0
-
 
 advIrqCount = 0
 # advance button
@@ -162,3 +207,84 @@ resetBut = Pin(0, mode=Pin.IN, pull=Pin.PULL_UP)
 resetBut.irq(trigger=Pin.IRQ_FALLING,handler=resIrq)
 advanceBut = Pin(1, mode=Pin.IN, pull=Pin.PULL_UP)
 advanceBut.irq(trigger=Pin.IRQ_FALLING,handler=advIrq)
+
+
+# %%%%%% MAIN LOOP %%%%%
+
+if __name__ == "__main__":
+    # set first run to forward
+    mindrive.setFwd(True)
+
+    # reset all outputs
+    mindrive.off_min()
+
+    # turn on machine LED when all setup is done
+    Pin("LED", Pin.OUT).on()
+
+    alignSec()
+
+    advMin = 0
+    advHor = 0
+
+    while True:
+        try:
+            conn, addr = s.accept()
+            print('Got a connection from', addr)
+            
+            # Receive and parse the request
+            request = conn.recv(1024)
+            request = str(request)
+            #print('Request content = %s' % request)
+
+            try:
+                request = request.split()[1]
+                print('Request:', request)
+            except IndexError:
+                pass
+
+            # Process the request and update variables
+            advMnReX = re.search(r'/advance\?advMin=(\d+)',request)
+            if advMnReX:
+                advMin = int(advMnReX.group(1))
+                print(f'Request advance {advMin}')
+            elif request == '/DSTon?':
+                print("DST on")
+                advHor = 1
+            elif request == '/DSToff?':
+                print("DST off")
+                advHor = 11
+            elif request =='/clrCh?':
+                print("reseted changes")
+                advMin = 0
+                advHor = 0
+            elif request =='/applyCh?':
+                resQueue.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(advMineq))
+                advMin = 0
+                advHor = 0
+                print("applied changes")
+            elif request =='/syncNTP?':
+                realignNTC()
+                
+            # convert minsince to hour:min
+            def convertMSe(mSe):
+                hour = mSe//60
+                hourDST = hour+1
+                if hour == 0:
+                    hour=12
+                minute = mSe%60
+                return hour,minute,hourDST
+            hour,minute,hourDST = convertMSe(minSince)
+
+            advMineq = advHor*60 + advMin
+
+            # Generate HTML response
+            response = webpage(hour,minute,hourDST,advMineq)  
+
+            # Send the HTTP response and close the connection
+            conn.send('HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n')
+            conn.send(response)
+            conn.close()
+
+        except OSError as e:
+            conn.close()
+            print('Connection closed')
