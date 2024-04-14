@@ -1,6 +1,6 @@
 import ntpsync
 import mindrive
-from machine import Pin, Timer
+from machine import Pin, Timer, reset
 
 # This code runs the clock
 
@@ -30,42 +30,53 @@ def alignSec():
     print ('I am correcting clock...')
     #lasthor,lastmin,lastsec = rtc.datetime()[4:7]
 
-    # update NTP time to RTC, get current ms
-    synMSe, second, microSec = ntpsync.updateRTC()
+    try:
+        # update NTP time to RTC, get current ms
+        synMSe, second, microSec = ntpsync.updateRTC()
 
-    # delay in ms to the next minute
-    msWait = 60000-(second*1000+microSec)
+    except:
+        print('Cannot get time, wait till next round, or reboot')
+        pass
 
-    #!!!! make sure code elegant!
-    if minSince == None:
-        preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
-        print('Initialise pulse')
     else:
-        delMSe = synMSe-minSince # check 720 case
-        if delMSe >= 0:
-            if (delMSe > 0 & delMSe < 5):
-                # clock runs slow, add the missed minute
-                moveMin(delMSe)
-                #corrMin.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(delMSe))
-                print(f'Adding {delMSe} correction mins')
-            # fire initial run
+        minTick.deinit()
+        # delay in ms to the next minute
+        msWait = 60000-(second*1000+microSec)
+
+        # correct missed minute if any (less than 5)
+        if minSince == None:
             preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
-            print('Initialise clock')
-        elif delMSe > -5:
-            # clock run fast
-            preTick.init(mode=Timer.ONE_SHOT, period=(msWait+60000*delMSe), callback=initPulse)
-            print(f'Initialise with {-delMSe} mins wait')
+            print('Initialise pulse')
         else:
-            preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
-            print(f'Initialise not/ Time off {-delMSe} mins, ignore correction')
-    minSince = synMSe
+            delMSe = synMSe-minSince # check 720 case
+            if delMSe >= 0:
+                # fire initial run
+                preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
+                print('Initialise clock')
+                if (delMSe > 0 & delMSe < 30):
+                    # clock runs slow, add the missed minute
+                    moveMin(delMSe)
+                    #corrMin.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(delMSe))
+                    print(f'Adding {delMSe} correction mins')
+                delMSe = 0
+            elif delMSe > -5:
+                # clock run fast
+                preTick.init(mode=Timer.ONE_SHOT, period=(msWait+60000*delMSe), callback=initPulse)
+                print(f'Initialise with {-delMSe} mins wait')
+                delMSe = 0
+            else:
+                preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
+                print(f'Initialise not/ Time off {-delMSe} mins, ignore correction')
+                delMSe = 0
+        minSince = synMSe
 
 def minTimer(addition):
+    # calculate time since UTC 12 am/pm
     global minSince
     minSince += addition
-    #12th o'clock
+    # at 1200
     if minSince >= 720:
-        minSince = addition
+        minSince = minSince-720+addition
     return minSince
 
     # while True:
@@ -101,20 +112,23 @@ def minPulse(timer):
 
 # check pulse reset condition
 def pulseReset(minSince):
-    if minSince>=719:
+    # align every six hours
+    if (minSince+1)%360==0:
         return True
-    return False
+    else:
+        return False
 
 # disable timer and realign second
 def pulseCal(timer):
-    timer.deinit()
-    print('Minute pulse disabled')
+    # timer.deinit()
+    # print('Minute pulse disabled')
+    print ('Times up, correcting clock')
     alignSec()
 
 def realignNTC():
-    #reset all ticks but don't touch minute counter, thic only moves hand
+    # reset all ticks but don't touch minute counter, thic only moves hand
     preTick.deinit()
-    minTick.deinit()
+    # minTick.deinit()
     resQueue.init(mode=Timer.ONE_SHOT, period=1000, callback=lambda i: alignSec())
     print('Realigning to NTP')
 
@@ -188,7 +202,7 @@ def resIrq(pin):
         resIrqCount=-1
         realignNTC()
         print('Time reset button pressed')
-        resetIrqT.init(mode=Timer.ONE_SHOT, period=400, callback=resetIrqCount)
+        resetIrqT.init(mode=Timer.ONE_SHOT, period=500, callback=resetIrqCount)
 
 resetIrqT = Timer()
 def resetIrqCount(timer=None):
@@ -219,17 +233,16 @@ advanceBut.irq(trigger=Pin.IRQ_FALLING,handler=advIrq)
 if __name__ == "__main__":
     # set first run to forward
     mindrive.setFwd(True)
-
     # reset all outputs
     mindrive.off_min()
-
-    # turn on machine LED when all setup is done
-    Pin("LED", Pin.OUT).on()
 
     alignSec()
 
     advMin = 0
     advHor = 0
+
+    # turn on machine LED when all setup is done
+    Pin("LED", Pin.OUT).on()
 
     while True:
         try:
@@ -293,3 +306,4 @@ if __name__ == "__main__":
         except OSError as e:
             conn.close()
             print('Connection closed')
+            reset()
