@@ -6,8 +6,13 @@ from machine import Pin, Timer
 
 # define minute advance function
 def moveMin(dMin):
-    for i in range(dMin):
-        Timer().init(mode=Timer.ONE_SHOT, period=0, callback=minWorker)
+    if dMin<=3:
+        for i in range(dMin):
+            Timer().init(mode=Timer.ONE_SHOT, period=0, callback=minWorker)
+    else:
+        for i in range(dMin):
+            mindrive.move_min()
+        realignNTC()
     print(f'Minute hand +{dMin}')
 
 def minWorker(timer):
