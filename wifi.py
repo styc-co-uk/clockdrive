@@ -21,21 +21,17 @@ def connect():
     wlan.active(True)
     wlan.connect(ssid, password)
     counter = 0
-    resetcounter = 0
     while wlan.isconnected() == False:
         print('Wifi: Waiting for connection...')
         counter+=1
-        if counter >= 10:
+        if counter>=15:
+            raise RuntimeError('network connection failed')
+        elif counter%5==0:
             wlan.deinit()
             wlan.active(True)
             wlan.connect(ssid, password)
-            counter = 0
-            resetcounter += 1
             print(r'Resetting wifi')
-        if resetcounter >= 5:
-           raise RuntimeError('network connection failed')
         time.sleep(1)
-    resetcounter = 0
     ip = wlan.ifconfig()[0]
     print(f'Wifi: Connected, IP: {ip}')
     

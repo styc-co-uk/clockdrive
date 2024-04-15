@@ -15,17 +15,41 @@ def moveMin(dMin):
     else:
         for i in range(dMin):
             mindrive.move_min(minSince)
+            reactivateWDT()
         realignNTC()
         
 def minWorker(timer):
     global minSince
+    global wdtCount
     mindrive.move_min(minSince)
+    reactivateWDT()
 
 # setup timers
 preTick = Timer()
 minTick = Timer()
+wdtKicker = Timer()
 #corrMin = Timer()
 minSince = None
+
+def reactivateWDT():
+    global wdtCount
+    wdtCount = 15
+    kickWDT()
+    wdtKicker.init(mode=Timer.PERIODIC, period=6000, callback=kickWDT)
+
+def kickWDT(timer=None):
+    global wdtCount
+    print(f'Feeding WDT, {wdtCount} autofeeds left')
+    # deactivate if there's no renew for 6000s
+    if wdtCount <= 0:
+        wdtKicker.deinit()
+    else:
+        try:
+            wdt.feed()
+        except:
+            print('WDT feed failed')
+            pass
+    wdtCount -= 1
 
 # wait until second is aligned and start timer
 def alignSec():
@@ -34,6 +58,7 @@ def alignSec():
     #lasthor,lastmin,lastsec = rtc.datetime()[4:7]
 
     try:
+        reactivateWDT()
         # update NTP time to RTC, get current ms
         synMSe, second, microSec = ntpsync.updateRTC()
 
@@ -42,6 +67,7 @@ def alignSec():
         pass
 
     else:
+        reactivateWDT()
         minTick.deinit()
         # delay in ms to the next minute
         msWait = 60000-(second*1000+microSec)
@@ -65,7 +91,7 @@ def alignSec():
                 else:
                     print(f'Ignore {delMSe} (>60) correction mins')
                 delMSe = 0
-            elif delMSe >= -30:
+            elif delMSe >= -10:
                 # clock run fast
                 preTick.init(mode=Timer.ONE_SHOT, period=(msWait+60000*delMSe), callback=initPulse)
                 print(f'Initialise with {-delMSe} mins wait')
@@ -258,7 +284,7 @@ if __name__ == "__main__":
     # turn on machine LED when all setup is done
     Pin("LED", Pin.OUT).on()
     wdt = WDT(timeout=8388)
-    Timer().init(mode=Timer.PERIODIC, period=8000, callback=lambda i: wdt.feed())
+
     print('Initialisation completed, watchdog timer initialised')
 
     while True:
@@ -323,7 +349,6 @@ if __name__ == "__main__":
             conn.send('HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n')
             conn.send(response)
             conn.close()
-            wdt.feed()
 
         except OSError as e:
             conn.close()
