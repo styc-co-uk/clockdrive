@@ -53,7 +53,7 @@ def alignSec():
                 # fire initial run
                 preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
                 print('Initialise clock')
-                if (delMSe > 0 & delMSe < 30):
+                if delMSe <= 60:
                     # clock runs slow, add the missed minute
                     moveMin(delMSe)
                     #corrMin.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(delMSe))
