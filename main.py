@@ -1,22 +1,25 @@
 import ntpsync
 import mindrive
-from machine import Pin, Timer, reset
+from machine import Pin, Timer, reset, WDT
+import json
 
 # This code runs the clock
 
 # define minute advance function
 def moveMin(dMin):
+    global minSince
+    print(f'Minute hand +{dMin}, at {minSince}')
     if dMin<=3:
         for i in range(dMin):
             Timer().init(mode=Timer.ONE_SHOT, period=0, callback=minWorker)
     else:
         for i in range(dMin):
-            mindrive.move_min()
+            mindrive.move_min(minSince)
         realignNTC()
-    print(f'Minute hand +{dMin}')
-
+        
 def minWorker(timer):
-    mindrive.move_min()
+    global minSince
+    mindrive.move_min(minSince)
 
 # setup timers
 preTick = Timer()
@@ -49,6 +52,7 @@ def alignSec():
             print('Initialise pulse')
         else:
             delMSe = synMSe-minSince # check 720 case
+            minSince = synMSe
             if delMSe >= 0:
                 # fire initial run
                 preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
@@ -58,8 +62,10 @@ def alignSec():
                     moveMin(delMSe)
                     #corrMin.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(delMSe))
                     print(f'Adding {delMSe} correction mins')
+                else:
+                    print(f'Ignore {delMSe} (>60) correction mins')
                 delMSe = 0
-            elif delMSe > -5:
+            elif delMSe >= -30:
                 # clock run fast
                 preTick.init(mode=Timer.ONE_SHOT, period=(msWait+60000*delMSe), callback=initPulse)
                 print(f'Initialise with {-delMSe} mins wait')
@@ -68,13 +74,12 @@ def alignSec():
                 preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
                 print(f'Initialise not/ Time off {-delMSe} mins, ignore correction')
                 delMSe = 0
-        minSince = synMSe
 
 def minTimer(addition):
     # calculate time since UTC 12 am/pm
     global minSince
     minSince += addition
-    # at 1200
+    # at 12:00
     if minSince >= 720:
         minSince = minSince-720+addition
     return minSince
@@ -123,7 +128,7 @@ def pulseCal(timer):
     # timer.deinit()
     # print('Minute pulse disabled')
     print ('Times up, correcting clock')
-    alignSec()
+    realignNTC()
 
 def realignNTC():
     # reset all ticks but don't touch minute counter, thic only moves hand
@@ -231,8 +236,17 @@ advanceBut.irq(trigger=Pin.IRQ_FALLING,handler=advIrq)
 # %%%%%% MAIN LOOP %%%%%
 
 if __name__ == "__main__":
+    try:
+        with open('clockstate.json') as f:
+            minSince = json.load(f)['minSince']
+            f.close()
+    except:
+        minSince = None
+    print(f'minSince read as {minSince}')
+
     # set first run to forward
-    mindrive.setFwd(True)
+    # mindrive.setFwd(True)
+
     # reset all outputs
     mindrive.off_min()
 
@@ -243,6 +257,9 @@ if __name__ == "__main__":
 
     # turn on machine LED when all setup is done
     Pin("LED", Pin.OUT).on()
+    wdt = WDT(timeout=8388)
+    Timer().init(mode=Timer.PERIODIC, period=8000, callback=lambda i: wdt.feed())
+    print('Initialisation completed, watchdog timer initialised')
 
     while True:
         try:
@@ -261,7 +278,7 @@ if __name__ == "__main__":
                 pass
 
             # Process the request and update variables
-            advMnReX = re.search(r'/advance\?advMin=(\d+)',request)
+            advMnReX = re.search(r'/advance\?advMin=(-?\d+)',request)
             if advMnReX:
                 advMin = int(advMnReX.group(1))
                 print(f'Request advance {advMin}')
@@ -276,7 +293,11 @@ if __name__ == "__main__":
                 advMin = 0
                 advHor = 0
             elif request =='/applyCh?':
-                resQueue.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(advMineq))
+                if advMin >=0:
+                    resQueue.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(advMineq))
+                else:
+                    minSince -= advMin
+                    realignNTC()
                 advMin = 0
                 advHor = 0
                 print("applied changes")
@@ -302,6 +323,7 @@ if __name__ == "__main__":
             conn.send('HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n')
             conn.send(response)
             conn.close()
+            wdt.feed()
 
         except OSError as e:
             conn.close()

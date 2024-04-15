@@ -1,7 +1,7 @@
 import wifi
 import ntptime2
 import utime
-from machine import RTC
+from machine import RTC, reset
 from timeconvert import minsFrom12
 import json
 
@@ -15,7 +15,10 @@ def printnow():
 
 def updateRTC():
     # this code can get UTC time from web and update Pi's clock
-    wifi.connect()
+    try:
+        wifi.connect()
+    except:
+        reset()
     #ntphosts = ("uk.pool.ntp.org","0.uk.pool.ntp.org","1.uk.pool.ntp.org","2.uk.pool.ntp.org","3.uk.pool.ntp.org","pool.ntp.org")
     # ntptime2.host = ntphosts[0]
     # try four times to get time

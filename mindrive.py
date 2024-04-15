@@ -8,6 +8,15 @@ with open('pinout.json') as f:
     pinout = json.load(f)
     f.close()
 
+try:
+    with open('clockstate.json') as f:
+        forward = bool(json.load(f)['forward'])
+        f.close()
+    print(r'Forward set as %s.'%forward)
+except:
+    forward = True
+    print(r'No data for forward, initialise as %s'%forward)
+
 # setup pins
 min0 = Pin(pinout['min0'], Pin.OUT)
 min1 = Pin(pinout['min1'], Pin.OUT)
@@ -16,9 +25,9 @@ led1 = Pin(pinout['led1'], Pin.OUT)
 led = Pin('LED', Pin.OUT)
 
 # input variable forward
-def setFwd(ifFwd=True):
-    global forward
-    forward = ifFwd
+#def setFwd(ifFwd=True):
+#    global forward
+#    forward = ifFwd
 
 # direction 1
 def Min0(val):
@@ -38,7 +47,7 @@ def off_min():
     Min1(False)
 
 # move minute hand
-def move_min():
+def move_min(minSince):
     global forward
     Min0(forward)
     Min1(not forward)
@@ -49,3 +58,6 @@ def move_min():
     off_min()
     led.on()
     time.sleep(0.25)
+    with open('clockstate.json', 'w') as f:
+        json.dump({'minSince':minSince, 'forward':int(forward)}, f)
+        f.close()
