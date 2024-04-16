@@ -58,6 +58,7 @@ def move_min(minSince):
     off_min()
     led.on()
     time.sleep(0.25)
+    print(f'Moving +1, at {minSince}')
     with open('clockstate.json', 'w') as f:
         json.dump({'minSince':minSince, 'forward':int(forward)}, f)
         f.close()

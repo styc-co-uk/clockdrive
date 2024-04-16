@@ -1,6 +1,8 @@
 import ntpsync
 import mindrive
+import time
 from machine import Pin, Timer, reset, WDT
+import wdtalive
 import json
 
 # This code runs the clock
@@ -9,56 +11,34 @@ import json
 def moveMin(dMin):
     global minSince
     print(f'Minute hand +{dMin}, at {minSince}')
-    if dMin<=3:
+    if dMin<=1:
         for i in range(dMin):
             Timer().init(mode=Timer.ONE_SHOT, period=0, callback=minWorker)
+        wdtalive.reactivateWDT()
     else:
         for i in range(dMin):
-            mindrive.move_min(minSince)
-            reactivateWDT()
+            mindrive.move_min((minSince-dMin+i+1)%720)
+            if i%5==0:
+                wdtalive.kickWDT()
         realignNTC()
         
 def minWorker(timer):
     global minSince
-    global wdtCount
     mindrive.move_min(minSince)
-    reactivateWDT()
 
 # setup timers
 preTick = Timer()
 minTick = Timer()
-wdtKicker = Timer()
 #corrMin = Timer()
 minSince = None
-
-def reactivateWDT():
-    global wdtCount
-    wdtCount = 15
-    kickWDT()
-    wdtKicker.init(mode=Timer.PERIODIC, period=6000, callback=kickWDT)
-
-def kickWDT(timer=None):
-    global wdtCount
-    print(f'Feeding WDT, {wdtCount} autofeeds left')
-    # deactivate if there's no renew for 6000s
-    if wdtCount <= 0:
-        wdtKicker.deinit()
-    else:
-        try:
-            wdt.feed()
-        except:
-            print('WDT feed failed')
-            pass
-    wdtCount -= 1
 
 # wait until second is aligned and start timer
 def alignSec():
     global minSince
     print ('I am correcting clock...')
     #lasthor,lastmin,lastsec = rtc.datetime()[4:7]
-
+    wdtalive.reactivateWDT()
     try:
-        reactivateWDT()
         # update NTP time to RTC, get current ms
         synMSe, second, microSec = ntpsync.updateRTC()
 
@@ -67,47 +47,40 @@ def alignSec():
         pass
 
     else:
-        reactivateWDT()
+        wdtalive.reactivateWDT()
         minTick.deinit()
         # delay in ms to the next minute
         msWait = 60000-(second*1000+microSec)
 
         # correct missed minute if any (less than 5)
         if minSince == None:
+            minSince = synMSe
             preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
             print('Initialise pulse')
         else:
-            delMSe = synMSe-minSince # check 720 case
+            delMSe = (synMSe-minSince)%720
             minSince = synMSe
-            if delMSe >= 0:
-                # fire initial run
+            # fire initial run
+            if (delMSe <= 120 and delMSe >= 0):
+                # clock runs slow, add the missed minute
                 preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
-                print('Initialise clock')
-                if delMSe <= 60:
-                    # clock runs slow, add the missed minute
-                    moveMin(delMSe)
-                    #corrMin.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(delMSe))
-                    print(f'Adding {delMSe} correction mins')
-                else:
-                    print(f'Ignore {delMSe} (>60) correction mins')
-                delMSe = 0
-            elif delMSe >= -10:
+                moveMin(delMSe)
+                #corrMin.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(delMSe))
+                print(f'Adding {delMSe} correction mins')
+            elif (delMSe > 710 and delMSe < 720):
                 # clock run fast
-                preTick.init(mode=Timer.ONE_SHOT, period=(msWait+60000*delMSe), callback=initPulse)
+                preTick.init(mode=Timer.ONE_SHOT, period=(msWait+60000*(720-delMSe)), callback=initPulse)
                 print(f'Initialise with {-delMSe} mins wait')
                 delMSe = 0
             else:
                 preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
-                print(f'Initialise not/ Time off {-delMSe} mins, ignore correction')
+                print(f'Initialise clock/nTime off {-delMSe} mins, ignore correction')
                 delMSe = 0
 
 def minTimer(addition):
     # calculate time since UTC 12 am/pm
     global minSince
-    minSince += addition
-    # at 12:00
-    if minSince >= 720:
-        minSince = minSince-720+addition
+    minSince = (minSince+addition)%720
     return minSince
 
     # while True:
@@ -144,7 +117,7 @@ def minPulse(timer):
 # check pulse reset condition
 def pulseReset(minSince):
     # align every six hours
-    if (minSince+1)%360==0:
+    if (minSince+5)%60==0:
         return True
     else:
         return False
@@ -212,15 +185,6 @@ def webpage(hour,minute,hourDST,advMineq):
         """
     return str(html)
 
-# Set up socket and start listening
-addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
-s = socket.socket()
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.bind(addr)
-s.listen()
-print('Listening on', addr)
-
-
 #%%%%%% THE RESET BUTTON %%%%%%
 
 resIrqCount = 0
@@ -281,10 +245,17 @@ if __name__ == "__main__":
     advMin = 0
     advHor = 0
 
+    # Set up socket and start listening
+    addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
+    s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(addr)
+    s.listen()
+    print('Listening on', addr)
+
     # turn on machine LED when all setup is done
     Pin("LED", Pin.OUT).on()
-    wdt = WDT(timeout=8388)
-
+    wdtalive.setWDT()
     print('Initialisation completed, watchdog timer initialised')
 
     while True:
@@ -306,7 +277,8 @@ if __name__ == "__main__":
             # Process the request and update variables
             advMnReX = re.search(r'/advance\?advMin=(-?\d+)',request)
             if advMnReX:
-                advMin = int(advMnReX.group(1))
+                # only allows max -10 mins wait as before
+                advMin = max(int(advMnReX.group(1)),-10)
                 print(f'Request advance {advMin}')
             elif request == '/DSTon?':
                 print("DST on")
@@ -332,10 +304,8 @@ if __name__ == "__main__":
                 
             # convert minsince to hour:min
             def convertMSe(mSe):
-                hour = mSe//60
+                hour = (mSe//60-1)%12+1
                 hourDST = hour+1
-                if hour == 0:
-                    hour=12
                 minute = mSe%60
                 return hour,minute,hourDST
             hour,minute,hourDST = convertMSe(minSince)
@@ -349,6 +319,7 @@ if __name__ == "__main__":
             conn.send('HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n')
             conn.send(response)
             conn.close()
+            time.sleep(0.5)
 
         except OSError as e:
             conn.close()

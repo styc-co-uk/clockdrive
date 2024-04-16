@@ -4,5 +4,4 @@
 # % this is used as the standartised timescale %
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 def minsFrom12(hour,minute):
-    if hour>=12: return (hour-12)*60+minute
-    else: return hour*60+minute
+    return (hour%12)*60+minute

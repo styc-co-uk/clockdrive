@@ -17,14 +17,14 @@ with open('auth.json') as f:
     password = wifi_config['password']
 
 def connect():
-    #Connect to WLAN
+    # Connect to WLAN
     wlan.active(True)
     wlan.connect(ssid, password)
     counter = 0
     while wlan.isconnected() == False:
         print('Wifi: Waiting for connection...')
         counter+=1
-        if counter>=15:
+        if counter>=25:
             raise RuntimeError('network connection failed')
         elif counter%5==0:
             wlan.deinit()
@@ -36,5 +36,10 @@ def connect():
     print(f'Wifi: Connected, IP: {ip}')
     
 def disconnect():
-    #Turn off wifi module
+    # Turn off wifi module
     wlan.deinit()
+
+def lazyconnect():
+    # Call connect but don't care if failed
+    wlan.active(True)
+    wlan.connect(ssid, password)
