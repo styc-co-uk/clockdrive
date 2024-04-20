@@ -117,7 +117,7 @@ def minPulse(timer):
 # check pulse reset condition
 def pulseReset(minSince):
     # align every six hours
-    if (minSince+5)%60==0:
+    if (minSince+5)%360==0:
         return True
     else:
         return False
