@@ -8,19 +8,22 @@ import json
 # This code runs the clock
 
 # define minute advance function
-def moveMin(dMin):
+def moveMin(minMove):
     global minSince
-    print(f'Minute hand +{dMin}, at {minSince}')
+    global waitMin
+    dMin = max(minMove-waitMin,0)
     if dMin<=1:
         for i in range(dMin):
             Timer().init(mode=Timer.ONE_SHOT, period=0, callback=minWorker)
-        wdtalive.reactivateWDT()
     else:
         for i in range(dMin):
             mindrive.move_min((minSince-dMin+i+1)%720)
             if i%5==0:
                 wdtalive.kickWDT()
         realignNTC()
+    wdtalive.reactivateWDT()
+    waitMin = max(waitMin-minMove,0)
+    print(f'Minute hand +{dMin}, at {minSince}, remaining waiting {waitMin}')
         
 def minWorker(timer):
     global minSince
@@ -31,10 +34,12 @@ preTick = Timer()
 minTick = Timer()
 #corrMin = Timer()
 minSince = None
+waitMin = 0
 
 # wait until second is aligned and start timer
 def alignSec():
     global minSince
+    global waitMin
     print ('I am correcting clock...')
     #lasthor,lastmin,lastsec = rtc.datetime()[4:7]
     wdtalive.reactivateWDT()
@@ -47,35 +52,37 @@ def alignSec():
         pass
 
     else:
-        wdtalive.reactivateWDT()
         minTick.deinit()
         # delay in ms to the next minute
         msWait = 60000-(second*1000+microSec)
 
+        preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
+        print('Initialise pulse')
+        
         # correct missed minute if any (less than 5)
         if minSince == None:
             minSince = synMSe
-            preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
-            print('Initialise pulse')
+            # preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
+            # print('Initialise pulse')
         else:
             delMSe = (synMSe-minSince)%720
             minSince = synMSe
             # fire initial run
             if (delMSe <= 120 and delMSe >= 0):
                 # clock runs slow, add the missed minute
-                preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
                 moveMin(delMSe)
                 #corrMin.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(delMSe))
                 print(f'Adding {delMSe} correction mins')
             elif (delMSe > 710 and delMSe < 720):
                 # clock run fast
-                preTick.init(mode=Timer.ONE_SHOT, period=(msWait+60000*(720-delMSe)), callback=initPulse)
-                print(f'Initialise with {-delMSe} mins wait')
-                delMSe = 0
+                # preTick.init(mode=Timer.ONE_SHOT, period=(msWait+60000*(720-delMSe)), callback=initPulse)
+                waitMin += 720-delMSe
+                print(f'Initialise with {waitMin} mins wait')
+                # delMSe = 0
             else:
-                preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
+                # preTick.init(mode=Timer.ONE_SHOT, period=msWait, callback=initPulse)
                 print(f'Initialise clock/nTime off {-delMSe} mins, ignore correction')
-                delMSe = 0
+            delMSe = 0
 
 def minTimer(addition):
     # calculate time since UTC 12 am/pm
@@ -244,6 +251,7 @@ if __name__ == "__main__":
 
     advMin = 0
     advHor = 0
+    advMineq = 0
 
     # Set up socket and start listening
     addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
@@ -291,11 +299,11 @@ if __name__ == "__main__":
                 advMin = 0
                 advHor = 0
             elif request =='/applyCh?':
-                if advMin >=0:
+                if advMineq >=0:
+                    waitMin = 0
                     resQueue.init(mode=Timer.ONE_SHOT, period=0, callback=lambda i: moveMin(advMineq))
                 else:
-                    minSince -= advMin
-                    realignNTC()
+                    waitMin = -advMineq
                 advMin = 0
                 advHor = 0
                 print("applied changes")
@@ -310,7 +318,7 @@ if __name__ == "__main__":
                 return hour,minute,hourDST
             hour,minute,hourDST = convertMSe(minSince)
 
-            advMineq = advHor*60 + advMin
+            advMineq = (advHor*60 + advMin +15)%720-15 # <705 positive >=705 from -15
 
             # Generate HTML response
             response = webpage(hour,minute,hourDST,advMineq)  
