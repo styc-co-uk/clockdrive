@@ -1,0 +1,49 @@
+import wifi
+import ntptime2
+import utime
+from machine import RTC
+from timeconvert import minsFrom12
+import json
+
+with open('ntphosts.json') as f:
+    ntphosts = json.load(f)['hosts']
+    f.close()
+
+def printnow():
+    rtc = RTC()
+    print(rtc.datetime())
+
+def updateRTC():
+    # this code can get UTC time from web and update Pi's clock
+    try:
+        wifi.connect()
+    except:
+        raise Exception("Wifi connection error!")
+    else:
+        # ntphosts = ("uk0.pool.ntp.org","uk1.pool.ntp.org") # for fail test
+        # try four times to get time
+        for i in range(len(ntphosts)*5):
+            j = i//5
+            ntptime2.host = ntphosts[j]
+            try:
+                print ('Syncing time from %s' % ntphosts[j])
+                t,ms = ntptime2.time()
+                # Note. settime() causes ~10ms delay
+                ntptime2.settime(t)
+                tm = utime.gmtime(t)
+                # convert to standartised timescale minute
+                mSe = minsFrom12(tm[3],tm[4])
+                sec = tm[5]
+                print (f'Minute since UTC 12 am/pm %03d:%02d.%03d'%(mSe,sec,ms))
+            except:
+                print ('get time error')
+                mSe = None
+                ms  = None
+                sec = None
+            else:
+                break
+        if mSe == None:
+            raise Exception("Get time error!")
+    return mSe, sec, ms
+    ## uncomment to discconnect WiFi after obtaining time 
+    # wifi.disconnect()
